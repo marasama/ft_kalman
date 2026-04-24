@@ -20,11 +20,11 @@ fn main() -> std::io::Result<()> {
         let (amt, _src) = socket.recv_from(&mut buffer)?;
         let buf = &buffer[..amt];
 
-        process_parsing(vehicle, parse(buf));
         println!(
             " {:?} ---> {:?}",
             amt,
             buf.iter().map(|a| *a as char).collect::<String>()
         );
+        process_parsing(&mut vehicle, parse(buf));
     }
 }

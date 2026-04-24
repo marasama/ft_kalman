@@ -6,25 +6,68 @@
 //87 ---> "[00:00:00.000]DIRECTION\n0.011132070329239845\n0.010590600280816103\n0.014958991641497313\n"
 //7 ---> "MSG_END"
 
-pub enum ParsingRes {
-    MSG_START,
-    MSG_END,
-    SPEED,
-    DIRECTION,
-    ACCELERATION,
-    UNDEFINED,
+#[derive(Debug)]
+pub enum ParsedData {
+    MsgStart,
+    MsgEnd,
+    TruePosition { x: f64, y: f64, z: f64 },
+    Speed { s: f64 },
+    Acceleration { x: f64, y: f64, z: f64 },
+    Direction { x: f64, y: f64, z: f64 },
+    Undefined,
 }
 
-use std::char;
+use core::f64;
 
 use crate::kalman::VehicleData;
 
-pub fn parse(data: &[u8]) -> (ParsingRes, (f64, f64, f64)) {
-    let text = data.iter().map(|a| *a as char).collect::<String>();
-    if text.eq("MSG_START") {
-        return (ParsingRes::MSG_START, (0., 0., 0.));
+pub fn parse(data: &[u8]) -> ParsedData {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return ParsedData::Undefined;
+    };
+    match text {
+        "MSG_START" => return ParsedData::MsgStart,
+        "MSG_END" => return ParsedData::MsgEnd,
+        _ => {}
     }
-    (ParsingRes::UNDEFINED, (-1., -1., -1.))
+
+    let Some((header, body)) = text.split_once('\n') else {
+        return ParsedData::Undefined;
+    };
+
+    let header = header.find(']').map(|i| &header[i + 1..]).unwrap_or(header);
+    let mut nums = body.lines().map(|n| n.parse::<f64>().unwrap_or(f64::NAN));
+
+    match header {
+        "TRUE POSITION" => {
+            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
+                return ParsedData::Undefined;
+            };
+            ParsedData::TruePosition { x, y, z }
+        }
+        "SPEED" => {
+            let Some(s) = nums.next() else {
+                return ParsedData::Undefined;
+            };
+            ParsedData::Speed { s }
+        }
+        "DIRECTION" => {
+            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
+                return ParsedData::Undefined;
+            };
+            ParsedData::Acceleration { x, y, z }
+        }
+        "ACCELERATION" => {
+            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
+                return ParsedData::Undefined;
+            };
+            ParsedData::Direction { x, y, z }
+        }
+
+        _ => ParsedData::Undefined,
+    }
 }
 
-pub fn process_parsing(vehicle: VehicleData, res: (ParsingRes, (f64, f64, f64))) {}
+pub fn process_parsing(vehicle: &mut VehicleData, res: ParsedData) {
+    println!("{:?}", res);
+}

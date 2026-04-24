@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 
 matrix = { git = "https://github.com/marasama/ft_matrix" } 
+regex = "1.12.3"
