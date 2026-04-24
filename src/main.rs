@@ -1,17 +1,30 @@
+use ft_kalman::kalman::*;
+use ft_kalman::udp_parser::*;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
-    let socket = UdpSocket::bind("127.0.0.1:8484")?;
+    let mut vehicle: VehicleData = VehicleData {
+        true_position: (-1., -1., -1.),
+        initial_speed: -1.,
+        acceleration: (-1., -1., -1.),
+        direction: (-1., -1., -1.),
+    };
 
+    println!("{}", vehicle);
+    let socket = UdpSocket::bind("127.0.0.1:8484")?;
     let _ = socket.connect("127.0.0.1:4242");
     let rdy = String::from("READY");
-    let binding = rdy.into_bytes();
-    let send_data: &[u8] = binding.as_array::<5>().unwrap();
-    let _ = socket.send(send_data);
-    let mut a = [0; 30];
-    let (amt, src) = socket.recv_from(&mut a)?;
-    let buf = &mut a[..amt];
-    println!(" {:?} ---> {:?}", amt, buf);
+    loop {
+        let _ = socket.send(rdy.as_bytes());
+        let mut buffer: [u8; 300] = [0; 300];
+        let (amt, _src) = socket.recv_from(&mut buffer)?;
+        let buf = &buffer[..amt];
 
-    Ok(())
+        process_parsing(vehicle, parse(buf));
+        println!(
+            " {:?} ---> {:?}",
+            amt,
+            buf.iter().map(|a| *a as char).collect::<String>()
+        );
+    }
 }
