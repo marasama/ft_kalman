@@ -6,33 +6,7 @@
 //87 ---> "[00:00:00.000]DIRECTION\n0.011132070329239845\n0.010590600280816103\n0.014958991641497313\n"
 //7 ---> "MSG_END"
 
-use std::any::Any;
-
-use crate::kalman::VehicleData;
-
-#[derive(Debug)]
-pub enum ParsedData {
-    MsgStart,
-    MsgEnd,
-    TruePosition { x: f64, y: f64, z: f64 },
-    Speed { s: f64 },
-    Acceleration { x: f64, y: f64, z: f64 },
-    Direction { x: f64, y: f64, z: f64 },
-    Undefined,
-}
-
-#[derive(Debug)]
-pub struct Time {
-    pub hours: u32,
-    pub minutes: u32,
-    pub seconds: f64,
-}
-
-#[derive(Debug)]
-pub struct Frame {
-    pub time: Option<Time>,
-    pub data: ParsedData,
-}
+use super::*;
 
 const UNDEF_FRAME: Frame = Frame {
     time: None,
@@ -108,13 +82,16 @@ pub fn parse(data: &[u8]) -> Frame {
 
 pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) {
     if let Some(t) = res.time {
-        vehicle.delta_time = (t.hours, t.minutes, t.seconds);
+        vehicle.delta_time = Time::delta(t, vehicle.time);
+        vehicle.time = t;
     }
     match res.data {
         ParsedData::TruePosition { x, y, z } => vehicle.true_position = (x, y, z),
         ParsedData::Acceleration { x, y, z } => vehicle.acceleration = (x, y, z),
         ParsedData::Direction { x, y, z } => vehicle.direction = (x, y, z),
         ParsedData::Speed { s } => vehicle.initial_speed = s,
-        _ => return,
+        ParsedData::MsgStart => println!("Message Started!"),
+        ParsedData::MsgEnd => println!("{}", vehicle),
+        ParsedData::Undefined => println!("Undefined entry!"),
     }
 }

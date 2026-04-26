@@ -1,12 +1,35 @@
+use super::*;
+use matrix::matrix::Matrix;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy)]
-pub struct VehicleData {
-    pub true_position: (f64, f64, f64),
-    pub initial_speed: f64,
-    pub acceleration: (f64, f64, f64),
-    pub direction: (f64, f64, f64),
-    pub delta_time: (u32, u32, f64),
+#[derive(Debug, Clone)]
+pub struct Kalman {
+    pub accel_error: f64,
+    pub gyro_error: f64,
+    pub gps_error: f64,
+    noise_matrix: Matrix<f64>,
+    pub state: Matrix<f64>,
+    pub previous_state: Matrix<f64>,
+}
+
+impl Kalman {
+    pub fn new(
+        accel_error: f64,
+        gyro_error: f64,
+        gps_error: f64,
+        noise_matrix: Matrix<f64>,
+        state: Matrix<f64>,
+        previous_state: Matrix<f64>,
+    ) -> Self {
+        Kalman {
+            accel_error,
+            gyro_error,
+            gps_error,
+            noise_matrix,
+            state,
+            previous_state,
+        }
+    }
 }
 
 impl Display for VehicleData {
@@ -19,6 +42,10 @@ impl Display for VehicleData {
         writeln!(f, "{:?}", self.acceleration)?;
         writeln!(f, "DIRECTION: ")?;
         writeln!(f, "{:?}", self.direction)?;
+        writeln!(f, "TIME: ")?;
+        writeln!(f, "{}", self.time)?;
+        writeln!(f, "DELTA TIME: ")?;
+        writeln!(f, "{:?}", self.delta_time)?;
         Ok(())
     }
 }
