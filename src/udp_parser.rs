@@ -6,6 +6,10 @@
 //87 ---> "[00:00:00.000]DIRECTION\n0.011132070329239845\n0.010590600280816103\n0.014958991641497313\n"
 //7 ---> "MSG_END"
 
+use std::any::Any;
+
+use crate::kalman::VehicleData;
+
 #[derive(Debug)]
 pub enum ParsedData {
     MsgStart,
@@ -17,57 +21,100 @@ pub enum ParsedData {
     Undefined,
 }
 
-use core::f64;
+#[derive(Debug)]
+pub struct Time {
+    pub hours: u32,
+    pub minutes: u32,
+    pub seconds: f64,
+}
 
-use crate::kalman::VehicleData;
+#[derive(Debug)]
+pub struct Frame {
+    pub time: Option<Time>,
+    pub data: ParsedData,
+}
 
-pub fn parse(data: &[u8]) -> ParsedData {
+const UNDEF_FRAME: Frame = Frame {
+    time: None,
+    data: ParsedData::Undefined,
+};
+
+pub fn parse_time(time_text: &str) -> Option<Time> {
+    let (hour, rest) = time_text.split_once(':')?;
+    let (minute, second) = rest.split_once(':')?;
+    Some(Time {
+        hours: hour.parse::<u32>().ok()?,
+        minutes: minute.parse::<u32>().ok()?,
+        seconds: second.parse::<f64>().ok()?,
+    })
+}
+
+pub fn parse(data: &[u8]) -> Frame {
     let Ok(text) = std::str::from_utf8(data) else {
-        return ParsedData::Undefined;
+        return UNDEF_FRAME;
     };
     match text {
-        "MSG_START" => return ParsedData::MsgStart,
-        "MSG_END" => return ParsedData::MsgEnd,
+        "MSG_START" => {
+            return Frame {
+                time: None,
+                data: ParsedData::MsgStart,
+            }
+        }
+        "MSG_END" => {
+            return Frame {
+                time: None,
+                data: ParsedData::MsgEnd,
+            }
+        }
         _ => {}
     }
-
     let Some((header, body)) = text.split_once('\n') else {
-        return ParsedData::Undefined;
+        return UNDEF_FRAME;
     };
 
-    let header = header.find(']').map(|i| &header[i + 1..]).unwrap_or(header);
-    let mut nums = body.lines().map(|n| n.parse::<f64>().unwrap_or(f64::NAN));
+    let Some((current_time, header)) = header
+        .split_once(']')
+        .map(|(time, rest)| (parse_time(&time[1..]), rest))
+    else {
+        return UNDEF_FRAME;
+    };
 
-    match header {
-        "TRUE POSITION" => {
-            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
-                return ParsedData::Undefined;
-            };
-            ParsedData::TruePosition { x, y, z }
-        }
-        "SPEED" => {
-            let Some(s) = nums.next() else {
-                return ParsedData::Undefined;
-            };
-            ParsedData::Speed { s }
-        }
-        "DIRECTION" => {
-            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
-                return ParsedData::Undefined;
-            };
-            ParsedData::Acceleration { x, y, z }
-        }
-        "ACCELERATION" => {
-            let (Some(x), Some(y), Some(z)) = (nums.next(), nums.next(), nums.next()) else {
-                return ParsedData::Undefined;
-            };
-            ParsedData::Direction { x, y, z }
-        }
-
+    let mut lines = body.lines();
+    let mut get_f64 = || lines.next()?.parse::<f64>().ok();
+    let data = match header {
+        "TRUE POSITION" => match (get_f64(), get_f64(), get_f64()) {
+            (Some(x), Some(y), Some(z)) => ParsedData::TruePosition { x, y, z },
+            _ => ParsedData::Undefined,
+        },
+        "DIRECTION" => match (get_f64(), get_f64(), get_f64()) {
+            (Some(x), Some(y), Some(z)) => ParsedData::Direction { x, y, z },
+            _ => ParsedData::Undefined,
+        },
+        "ACCELERATION" => match (get_f64(), get_f64(), get_f64()) {
+            (Some(x), Some(y), Some(z)) => ParsedData::Acceleration { x, y, z },
+            _ => ParsedData::Undefined,
+        },
+        "SPEED" => match get_f64() {
+            Some(s) => ParsedData::Speed { s },
+            _ => ParsedData::Undefined,
+        },
         _ => ParsedData::Undefined,
+    };
+    Frame {
+        time: current_time,
+        data,
     }
 }
 
-pub fn process_parsing(vehicle: &mut VehicleData, res: ParsedData) {
-    println!("{:?}", res);
+pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) {
+    if let Some(t) = res.time {
+        vehicle.delta_time = (t.hours, t.minutes, t.seconds);
+    }
+    match res.data {
+        ParsedData::TruePosition { x, y, z } => vehicle.true_position = (x, y, z),
+        ParsedData::Acceleration { x, y, z } => vehicle.acceleration = (x, y, z),
+        ParsedData::Direction { x, y, z } => vehicle.direction = (x, y, z),
+        ParsedData::Speed { s } => vehicle.initial_speed = s,
+        _ => return,
+    }
 }

@@ -1,6 +1,4 @@
-use std::fmt::{write, Display};
-
-use matrix::matrix::Matrix;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy)]
 pub struct VehicleData {
@@ -8,6 +6,7 @@ pub struct VehicleData {
     pub initial_speed: f64,
     pub acceleration: (f64, f64, f64),
     pub direction: (f64, f64, f64),
+    pub delta_time: (u32, u32, f64),
 }
 
 impl Display for VehicleData {

@@ -8,6 +8,7 @@ fn main() -> std::io::Result<()> {
         initial_speed: -1.,
         acceleration: (-1., -1., -1.),
         direction: (-1., -1., -1.),
+        delta_time: (0, 0, 0.),
     };
 
     println!("{}", vehicle);
@@ -25,6 +26,6 @@ fn main() -> std::io::Result<()> {
             amt,
             buf.iter().map(|a| *a as char).collect::<String>()
         );
-        process_parsing(&mut vehicle, parse(buf));
+        println!("{:?}", parse(buf));
     }
 }
