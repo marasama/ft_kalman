@@ -7,7 +7,7 @@ pub struct Kalman {
     pub accel_error: f64,
     pub gyro_error: f64,
     pub gps_error: f64,
-    noise_matrix: Matrix<f64>,
+    pub noise_matrix: Matrix<f64>,
     pub state: Matrix<f64>,
     pub previous_state: Matrix<f64>,
 }
