@@ -1,6 +1,7 @@
 //DATA FORMAT
 //9 ---> "MSG_START"
 //69 ---> "[00:00:00.000]TRUE POSITION\n8.087830169543953\n-3.684344480772115\n0.5\n"
+//69 ---> "[00:00:00.000]POSITION\n8.087830169543953\n-3.684344480772115\n0.5\n"
 //38 ---> "[00:00:00.000]SPEED\n54.33707206642073\n"
 //91 ---> "[00:00:00.000]ACCELERATION\n-0.006974409692370343\n0.002745037193434422\n0.015353371960037995\n"
 //87 ---> "[00:00:00.000]DIRECTION\n0.011132070329239845\n0.010590600280816103\n0.014958991641497313\n"
@@ -72,6 +73,10 @@ pub fn parse(data: &[u8]) -> Frame {
             Some(s) => ParsedData::Speed { s },
             _ => ParsedData::Undefined,
         },
+        "POSITION" => match (get_f64(), get_f64(), get_f64()) {
+            (Some(x), Some(y), Some(z)) => ParsedData::GpsPosition { x, y, z },
+            _ => ParsedData::Undefined,
+        },
         _ => ParsedData::Undefined,
     };
     Frame {
@@ -80,18 +85,40 @@ pub fn parse(data: &[u8]) -> Frame {
     }
 }
 
-pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) {
+pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) -> bool {
     if let Some(t) = res.time {
         vehicle.delta_time = Time::delta(t, vehicle.time);
         vehicle.time = t;
     }
     match res.data {
-        ParsedData::TruePosition { x, y, z } => vehicle.true_position = (x, y, z),
-        ParsedData::Acceleration { x, y, z } => vehicle.acceleration = (x, y, z),
-        ParsedData::Direction { x, y, z } => vehicle.direction = (x, y, z),
-        ParsedData::Speed { s } => vehicle.initial_speed = s,
-        ParsedData::MsgStart => println!("Message Started!"),
-        ParsedData::MsgEnd => println!("{}", vehicle),
-        ParsedData::Undefined => println!("Undefined entry!"),
+        ParsedData::TruePosition { x, y, z } => {
+            vehicle.true_position = (x, y, z);
+            false
+        }
+        ParsedData::Acceleration { x, y, z } => {
+            vehicle.acceleration = (x, y, z);
+            false
+        }
+        ParsedData::Direction { x, y, z } => {
+            vehicle.direction = (x, y, z);
+            false
+        }
+        ParsedData::Speed { s } => {
+            vehicle.initial_speed = s;
+            false
+        }
+        ParsedData::GpsPosition { x, y, z } => {
+            vehicle.gps_position = (x, y, z);
+            false
+        }
+        ParsedData::MsgStart => {
+            println!("Message Started!");
+            false
+        }
+        ParsedData::MsgEnd => true,
+        ParsedData::Undefined => {
+            println!("Undefined entry!");
+            false
+        }
     }
 }

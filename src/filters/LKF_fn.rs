@@ -27,7 +27,7 @@ impl<K: Float + SubAssign + AddAssign> LKF<K> {
             .add_mat_ref(&P_joseph)
     }
 
-    fn new(
+    pub fn new(
         n_x: usize,
         n_z: usize,
         n_u: usize,

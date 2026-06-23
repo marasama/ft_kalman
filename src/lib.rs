@@ -1,5 +1,4 @@
 pub mod filters;
-pub mod kalman;
 pub mod udp_parser;
 
 use std::fmt::Display;
@@ -10,6 +9,7 @@ pub struct VehicleData {
     pub initial_speed: f64,
     pub acceleration: (f64, f64, f64),
     pub direction: (f64, f64, f64),
+    pub gps_position: (f64, f64, f64),
     pub time: Time,
     pub delta_time: f64,
 }
@@ -22,6 +22,7 @@ pub enum ParsedData {
     Speed { s: f64 },
     Acceleration { x: f64, y: f64, z: f64 },
     Direction { x: f64, y: f64, z: f64 },
+    GpsPosition { x: f64, y: f64, z: f64 },
     Undefined,
 }
 
