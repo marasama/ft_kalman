@@ -109,10 +109,12 @@ pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) -> bool {
         }
         ParsedData::GpsPosition { x, y, z } => {
             vehicle.gps_position = (x, y, z);
+            vehicle.gps_fresh = true;
             false
         }
         ParsedData::MsgStart => {
             println!("Message Started!");
+            vehicle.gps_fresh = false;
             false
         }
         ParsedData::MsgEnd => true,

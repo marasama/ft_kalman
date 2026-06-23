@@ -31,8 +31,10 @@ pub trait KalmanModel<K: Float> {
 pub struct KalmanCore<K: Float, M: KalmanModel<K>> {
     pub model: M,
     pub x: Vector<K>,
+    pub x_prior: Vector<K>,
     pub P: Matrix<K>,
-    K: Matrix<K>,
+    pub P_prior: Matrix<K>,
+    pub K: Matrix<K>,
     pub Q: Matrix<K>,
     pub R: Matrix<K>,
 }
@@ -51,8 +53,10 @@ impl<K: Float, M: KalmanModel<K>> KalmanCore<K, M> {
     }
 
     pub fn step(&mut self, z: &Vector<K>, u: &Option<Vector<K>>) {
-        let (x_prior, P_prior) = self.model.predict(&self.x, u, &self.P, &self.Q);
-        (self.x, self.P, self.K) = self.model.update(&x_prior, z, u, &P_prior, &self.R);
+        (self.x_prior, self.P_prior) = self.model.predict(&self.x, u, &self.P, &self.Q);
+        (self.x, self.P, self.K) = self
+            .model
+            .update(&self.x_prior, z, u, &self.P_prior, &self.R);
     }
 
     pub fn new(model: M, x: Vector<K>, P: Matrix<K>, Q: Matrix<K>, R: Matrix<K>) -> Self {
@@ -81,7 +85,9 @@ impl<K: Float, M: KalmanModel<K>> KalmanCore<K, M> {
         Self {
             model,
             x,
+            x_prior: Vector::empty(),
             P,
+            P_prior: Matrix::empty(),
             K: Matrix::empty(),
             Q,
             R,

@@ -37,6 +37,7 @@ fn main() -> std::io::Result<()> {
         acceleration: (-1., -1., -1.),
         direction: (-1., -1., -1.),
         gps_position: (0., 0., 0.),
+        gps_fresh: false,
         time: Time {
             hours: 0,
             minutes: 0,
@@ -53,6 +54,7 @@ fn main() -> std::io::Result<()> {
     // σ²_gyro · Δt²
     let gn_delta: f64 = gyro_noise * delta_t_pow_2;
     let accel_noise: f64 = num_traits::pow(1e-3, 2);
+    let gps_noise: f64 = num_traits::pow(1e-1, 2);
     let q_pp = (delta_t_pow_4 / 4.) * accel_noise;
     let q_pv = (delta_t_pow_3 / 2.) * accel_noise;
     let q_pa = (delta_t_pow_2 / 2.) * accel_noise;
@@ -83,6 +85,12 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., accel_noise],
     ]);
 
+    let R_gps: Matrix<f64> = Matrix::from([
+        [gps_noise, 0., 0.],
+        [0., gps_noise, 0.],
+        [0., 0., gps_noise],
+    ]);
+
     let F: Matrix<f64> = Matrix::from([
         [1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -105,6 +113,12 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
         [0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
         [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
+    ]);
+
+    let H_gps: Matrix<f64> = Matrix::from([
+        [0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+        [0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+        [0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0.],
     ]);
     let model = filters::LKF::new(12, 6, 0, F, H, Option::None);
 
@@ -182,5 +196,19 @@ fn main() -> std::io::Result<()> {
         z.data[4] = vehicle.acceleration.1;
         z.data[5] = vehicle.acceleration.2;
         filter.step(&z, &u);
+        if vehicle.gps_fresh {
+            let z_gps: Vector<f64> = Vector::from([
+                vehicle.gps_position.0,
+                vehicle.gps_position.1,
+                vehicle.gps_position.2,
+            ]);
+
+            let x_post = filter.x.clone();
+            let P_post = filter.P.clone();
+            (filter.x, filter.P, filter.K) = filter
+                .model
+                .update_with(&x_post, &z_gps, &u, &P_post, &R_gps, &H_gps);
+            vehicle.gps_fresh = false;
+        }
     }
 }

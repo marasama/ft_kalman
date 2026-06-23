@@ -10,6 +10,7 @@ pub struct VehicleData {
     pub acceleration: (f64, f64, f64),
     pub direction: (f64, f64, f64),
     pub gps_position: (f64, f64, f64),
+    pub gps_fresh: bool,
     pub time: Time,
     pub delta_time: f64,
 }

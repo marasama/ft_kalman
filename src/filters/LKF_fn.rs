@@ -67,6 +67,63 @@ impl<K: Float + SubAssign + AddAssign> LKF<K> {
             I: identity_matrix(n_x),
         }
     }
+
+    pub fn update_with(
+        &self,
+        x_prior: &Vector<K>,
+        z: &Vector<K>,
+        u: &Option<Vector<K>>,
+        P_prior: &Matrix<K>,
+        R: &Matrix<K>,
+        H: &Matrix<K>,
+    ) -> (Vector<K>, Matrix<K>, Matrix<K>) {
+        let n_z = z.size();
+        assert_eq!(
+            x_prior.size(),
+            self.n_x,
+            "Prior State Vector size must be {}!",
+            self.n_x
+        );
+        assert_eq!(
+            P_prior.size(),
+            (self.n_x, self.n_x),
+            "Prior Covariance Matrix size must be ({}, {})!",
+            self.n_x,
+            self.n_x
+        );
+        assert_eq!(
+            R.size(),
+            (n_z, n_z),
+            "Measurement Covariance Matrix size must be ({}, {})!",
+            n_z,
+            n_z,
+        );
+        assert_eq!(
+            H.size(),
+            (n_z, self.n_x),
+            "Observation Matrix size must be ({}, {})!",
+            n_z,
+            self.n_x,
+        );
+        let mut gain: Matrix<K> = H
+            .mul_mat_ref(P_prior)
+            .mul_mat_ref(&H.transpose())
+            .add_mat_ref(R);
+        let K_n = P_prior
+            .mul_mat_ref(&H.transpose())
+            .mul_mat_ref(&gain.inverse().unwrap());
+        dbg!("ZORT");
+        let x = K_n
+            .mul_vec_ref(&(z.sub_vec_ref(&H.mul_vec_ref(x_prior))))
+            .add_vec_ref(x_prior);
+        let P_joseph = &K_n.mul_mat_ref(R).mul_mat_ref(&K_n.transpose());
+        let main_part = self.I.sub_mat_ref(&K_n.mul_mat_ref(&H));
+        let P = main_part
+            .mul_mat_ref(P_prior)
+            .mul_mat_ref(&main_part.transpose())
+            .add_mat_ref(&P_joseph);
+        (x, P, K_n)
+    }
 }
 
 impl<K: Float + AddAssign + SubAssign> KalmanModel<K> for LKF<K> {
