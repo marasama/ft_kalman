@@ -189,13 +189,27 @@ fn main() -> std::io::Result<()> {
                 break;
             }
         }
+
+        let (roll, pitch, yaw) = vehicle.direction;
+
+        let ax_body = vehicle.acceleration.0;
+        let ay_body = vehicle.acceleration.1;
+        let az_body = vehicle.acceleration.2;
+
+        let ax_world = ax_body * pitch.cos() * yaw.cos() - ay_body * yaw.sin()
+            + az_body * pitch.sin() * yaw.cos();
+        let ay_world = ax_body * pitch.cos() * yaw.sin()
+            + ay_body * yaw.cos()
+            + az_body * pitch.sin() * yaw.sin();
+        let az_world = -ax_body * pitch.sin() + az_body * pitch.cos();
         z.data[0] = vehicle.direction.0;
         z.data[1] = vehicle.direction.1;
         z.data[2] = vehicle.direction.2;
-        z.data[3] = vehicle.acceleration.0;
-        z.data[4] = vehicle.acceleration.1;
-        z.data[5] = vehicle.acceleration.2;
+        z.data[3] = ax_body;
+        z.data[4] = ay_body;
+        z.data[5] = az_body;
         filter.step(&z, &u);
+
         if vehicle.gps_fresh {
             let z_gps: Vector<f64> = Vector::from([
                 vehicle.gps_position.0,
