@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 
-matrix = { git = "https://github.com/marasama/ft_matrix" } 
+matrix = { git = "https://github.com/marasama/ft_matrix", branch = "stack_mem" } 
 num-traits = "0.2.19"

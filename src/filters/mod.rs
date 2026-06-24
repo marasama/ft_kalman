@@ -8,24 +8,29 @@ use matrix::matrix::Matrix;
 use matrix::vector::Vector;
 use num_traits::Float;
 
-pub trait KalmanModel<K: Float> {
+pub trait KalmanModel<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+{
     fn state_dim(&self) -> usize;
     fn meas_dim(&self) -> usize;
     fn predict(
         &mut self,
-        x: &Vector<K>,
-        u: &Option<Vector<K>>,
-        P: &Matrix<K>,
-        Q: &Matrix<K>,
-    ) -> (Vector<K>, Matrix<K>); // x_prior, P_prior
+        x: &Vector<K, N_X>,
+        u: &Option<Vector<K, N_U>>,
+        P: &Matrix<K, N_X, N_X>,
+        Q: &Matrix<K, N_X, N_X>,
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>); // x_prior, P_prior
     fn update(
         &self,
-        x_prior: &Vector<K>,
-        z: &Vector<K>,
-        u: &Option<Vector<K>>,
-        P_prior: &Matrix<K>,
-        R: &Matrix<K>,
-    ) -> (Vector<K>, Matrix<K>, Matrix<K>); // x, P, K
+        x_prior: &Vector<K, N_X>,
+        z: &Vector<K, N_Z>,
+        u: &Option<Vector<K, N_U>>,
+        P_prior: &Matrix<K, N_X, N_X>,
+        R: &Matrix<K, N_Z, N_Z>,
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>, Matrix<K>); // x, P, K
 }
 
 pub struct KalmanCore<K: Float, M: KalmanModel<K>> {
@@ -135,14 +140,14 @@ pub struct UKF<K: Float> {
 }
 
 // Extended Kalman Filter --------------------------------------------------
-pub enum EKF_TransitionModel<K: Float> {
+pub enum EKF_TransitionModel<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize> {
     Linear {
-        F: Matrix<K>,
-        F_transpose: Matrix<K>,
+        F: Matrix<K, N_X, N_X>,
+        F_transpose: Matrix<K, N_X, N_X>,
     },
     NonLinear {
-        f: fn(&Vector<K>, &Option<Vector<K>>) -> Vector<K>,
-        jac: fn(&Vector<K>, &Option<Vector<K>>) -> Matrix<K>,
+        f: fn(&Vector<K, N_X>, &Option<Vector<K, N_U>>) -> Vector<K, N_X>,
+        jac: fn(&Vector<K, N_X>, &Option<Vector<K, N_U>>) -> Matrix<K, N_X, N_X>,
     },
 }
 

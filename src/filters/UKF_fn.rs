@@ -1,40 +1,54 @@
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 use crate::filters::{KalmanModel, UKF_ObservationModel, UKF_TransitionModel, UKF};
 use matrix::matrix::{funcs::inverse::identity_matrix, Matrix};
 use matrix::vector::Vector;
 use num_traits::Float;
 use std::ops::{AddAssign, Mul, SubAssign};
 
-impl<K: Float + AddAssign + SubAssign> UKF<K> {
-    fn calculate_sigma_points(&self, x: &Vector<K>, P: &Matrix<K>) -> Matrix<K> {
-        let mut data: Vec<K> = vec![K::zero(); (self.n_x * 2 + 1) * self.n_x];
-        let scale: K = K::from(self.n_x).unwrap() + self.lambda;
-        let num_sigma_points = self.n_x * 2 + 1;
+impl<K: Float + AddAssign + SubAssign, const N_X: usize> UKF<K>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * (2 * N_X + 1)]:,
+    [(); (2 * N_X + 1) * (2 * N_X + 1)]:,
+{
+    fn calculate_sigma_points(
+        &self,
+        x: &Vector<K, N_X>,
+        P: &Matrix<K, N_X, N_X>,
+    ) -> Matrix<K, N_X, { 2 * N_X + 1 }> {
+        let mut data = [K::zero(); (N_X * 2 + 1) * N_X];
+        let scale: K = K::from(N_X).unwrap() + self.lambda;
+        let num_sigma_points = N_X * 2 + 1;
         let sqrt_mat = P.scl_mat_ref(scale).cholesky();
-        for r in 0..self.n_x {
+        for r in 0..N_X {
             // First columns is state vector itself
             data[r * num_sigma_points] = x.data[r];
-            for i in 0..self.n_x {
-                let delta = sqrt_mat.data[r * self.n_x + i];
+            for i in 0..N_X {
+                let delta = sqrt_mat.data[r * N_X + i];
                 let col_positive = 1 + i;
-                let col_negative = 1 + self.n_x + i;
+                let col_negative = 1 + N_X + i;
 
                 data[r * num_sigma_points + col_positive] = x.data[r] + delta;
                 data[r * num_sigma_points + col_negative] = x.data[r] - delta;
             }
         }
-
-        Matrix {
-            data,
-            rows: self.n_x,
-            cols: num_sigma_points,
-        }
+        Matrix { data }
     }
 
-    fn calculate_weights(w_0: K, w_0_c: K, w_i: K, length: usize) -> (Vector<K>, Matrix<K>) {
-        let mut diagonal = identity_matrix(length);
+    fn calculate_weights(
+        w_0: K,
+        w_0_c: K,
+        w_i: K,
+        length: usize,
+    ) -> (
+        Vector<K, { 2 * N_X + 1 }>,
+        Matrix<K, { 2 * N_X + 1 }, { 2 * N_X + 1 }>,
+    ) {
+        let mut diagonal = identity_matrix::<K, { 2 * N_X + 1 }>();
         diagonal.scl(w_i);
         diagonal.data[0] = w_0_c;
-        let mut new_data = vec![w_i; length];
+        let mut new_data = [w_i; length];
         new_data[0] = w_0;
         (Vector { data: new_data }, diagonal)
     }
@@ -43,8 +57,8 @@ impl<K: Float + AddAssign + SubAssign> UKF<K> {
         n_x: usize,
         n_z: usize,
         n_u: usize,
-        F: UKF_TransitionModel<K>,
-        H: UKF_ObservationModel<K>,
+        F: UKF_TransitionModel<K, N_X>,
+        H: UKF_ObservationModel<K, N_X, N_Z>,
         G: Option<Matrix<K>>,
         alpha: K,
         beta: K,
