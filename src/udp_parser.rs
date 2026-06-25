@@ -113,13 +113,13 @@ pub fn process_parsing(vehicle: &mut VehicleData, res: Frame) -> bool {
             false
         }
         ParsedData::MsgStart => {
-            println!("Message Started!");
+            //println!("Message Started!");
             vehicle.gps_fresh = false;
             false
         }
         ParsedData::MsgEnd => true,
         ParsedData::Undefined => {
-            println!("Undefined entry!");
+            //println!("Undefined entry!");
             false
         }
     }

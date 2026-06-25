@@ -112,7 +112,6 @@ impl<K: Float + SubAssign + AddAssign> LKF<K> {
         let K_n = P_prior
             .mul_mat_ref(&H.transpose())
             .mul_mat_ref(&gain.inverse().unwrap());
-        dbg!("ZORT");
         let x = K_n
             .mul_vec_ref(&(z.sub_vec_ref(&H.mul_vec_ref(x_prior))))
             .add_vec_ref(x_prior);

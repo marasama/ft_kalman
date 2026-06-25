@@ -184,7 +184,7 @@ fn main() -> std::io::Result<()> {
         loop {
             let mut buffer: [u8; 400] = [0; 400];
             let (amt, _src) = socket.recv_from(&mut buffer)?;
-            println!(r"{}", String::from_utf8_lossy(&buffer[..amt]));
+            //println!(r"{}", String::from_utf8_lossy(&buffer[..amt]));
             if process_parsing(&mut vehicle, parse(&buffer[..amt])) {
                 break;
             }
