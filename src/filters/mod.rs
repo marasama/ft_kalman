@@ -27,73 +27,75 @@ where
         &self,
         x_prior: &Vector<K, N_X>,
         z: &Vector<K, N_Z>,
-        u: &Option<Vector<K, N_U>>,
         P_prior: &Matrix<K, N_X, N_X>,
         R: &Matrix<K, N_Z, N_Z>,
-    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>, Matrix<K>); // x, P, K
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>, Matrix<K, N_X, N_Z>); // x, P, K
 }
 
-pub struct KalmanCore<K: Float, M: KalmanModel<K>> {
+pub struct KalmanCore<
+    K: Float,
+    M: KalmanModel<K, N_X, N_Z, N_U>,
+    const N_X: usize,
+    const N_Z: usize,
+    const N_U: usize,
+> where
+    [(); N_X * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+{
     pub model: M,
-    pub x: Vector<K>,
-    pub x_prior: Vector<K>,
-    pub P: Matrix<K>,
-    pub P_prior: Matrix<K>,
-    pub K: Matrix<K>,
-    pub Q: Matrix<K>,
-    pub R: Matrix<K>,
+    pub x: Vector<K, N_X>,
+    pub x_prior: Vector<K, N_X>,
+    pub P: Matrix<K, N_X, N_X>,
+    pub P_prior: Matrix<K, N_X, N_X>,
+    pub K: Matrix<K, N_X, N_Z>,
+    pub Q: Matrix<K, N_X, N_X>,
+    pub R: Matrix<K, N_Z, N_Z>,
 }
 
-impl<K: Float, M: KalmanModel<K>> KalmanCore<K, M> {
-    pub fn state(&self) -> &Vector<K> {
+impl<
+        K: Float,
+        M: KalmanModel<K, N_X, N_Z, N_U>,
+        const N_X: usize,
+        const N_Z: usize,
+        const N_U: usize,
+    > KalmanCore<K, M, N_X, N_Z, N_U>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+{
+    pub fn state(&self) -> &Vector<K, N_X> {
         &self.x
     }
 
-    pub fn covariance(&self) -> &Matrix<K> {
+    pub fn covariance(&self) -> &Matrix<K, N_X, N_X> {
         &self.P
     }
 
-    pub fn kalman_gain(&self) -> &Matrix<K> {
+    pub fn kalman_gain(&self) -> &Matrix<K, N_X, N_Z> {
         &self.K
     }
 
-    pub fn step(&mut self, z: &Vector<K>, u: &Option<Vector<K>>) {
+    pub fn step(&mut self, z: &Vector<K, N_Z>, u: &Option<Vector<K, N_U>>) {
         (self.x_prior, self.P_prior) = self.model.predict(&self.x, u, &self.P, &self.Q);
-        (self.x, self.P, self.K) = self
-            .model
-            .update(&self.x_prior, z, u, &self.P_prior, &self.R);
+        (self.x, self.P, self.K) = self.model.update(&self.x_prior, z, &self.P_prior, &self.R);
     }
 
-    pub fn new(model: M, x: Vector<K>, P: Matrix<K>, Q: Matrix<K>, R: Matrix<K>) -> Self {
-        let n_x = model.state_dim();
-        let n_z = model.meas_dim();
-        assert_eq!(x.size(), n_x, "State Vector size must be equal to {}!", n_x,);
-        assert_eq!(
-            P.size(),
-            (n_x, n_x),
-            "Covariance Matrix size must be equal to {:?}!",
-            (n_x, n_x)
-        );
-        assert_eq!(
-            Q.size(),
-            (n_x, n_x),
-            "Process Noise Matrix size must be equal to {:?}!",
-            (n_x, n_x)
-        );
-        assert_eq!(
-            R.size(),
-            (n_z, n_z),
-            "Measurement Noise Matrix size must be equal to {:?}!",
-            (n_z, n_z)
-        );
-
+    pub fn new(
+        model: M,
+        x: Vector<K, N_X>,
+        P: Matrix<K, N_X, N_X>,
+        Q: Matrix<K, N_X, N_X>,
+        R: Matrix<K, N_Z, N_Z>,
+    ) -> Self {
         Self {
             model,
             x,
-            x_prior: Vector::empty(),
+            x_prior: Vector::<K, N_X>::zeros(),
             P,
-            P_prior: Matrix::empty(),
-            K: Matrix::empty(),
+            P_prior: Matrix::<K, N_X, N_X>::zeros(),
+            K: Matrix::<K, N_X, N_Z>::zeros(),
             Q,
             R,
         }
@@ -101,49 +103,79 @@ impl<K: Float, M: KalmanModel<K>> KalmanCore<K, M> {
 }
 
 // Unscented Kalman Filter -----------------------------------------------
-pub enum UKF_TransitionModel<K: Float> {
+pub enum UKF_TransitionModel<K: Float, const N_X: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * (2 * N_X + 1)]:,
+{
     Linear {
-        F: Matrix<K>,
+        F: Matrix<K, N_X, N_X>,
     },
     NonLinear {
-        f: fn(&Matrix<K>, &Option<Vector<K>>) -> Matrix<K>,
+        f: fn(
+            &Matrix<K, N_X, { 2 * N_X + 1 }>,
+            &Option<Vector<K, N_U>>,
+        ) -> Matrix<K, N_X, { 2 * N_X + 1 }>,
     },
 }
 
-pub enum UKF_ObservationModel<K: Float> {
-    Linear { H: Matrix<K> },
-    NonLinear { h: fn(&Matrix<K>) -> Matrix<K> },
+pub enum UKF_ObservationModel<K: Float, const N_X: usize, const N_Z: usize>
+where
+    [(); N_Z * N_X]:,
+    [(); N_Z * (2 * N_X + 1)]:,
+    [(); N_X * (2 * N_X + 1)]:,
+{
+    Linear {
+        H: Matrix<K, N_Z, N_X>,
+    },
+
+    NonLinear {
+        h: fn(&Matrix<K, N_X, { 2 * N_X + 1 }>) -> Matrix<K, N_Z, { 2 * N_X + 1 }>,
+    },
 }
 
 /// Unscented Kalman Filter
-pub struct UKF<K: Float> {
-    /// State Vector
-    pub n_x: usize,
-    /// Measurement Vector
-    pub n_z: usize,
-    /// Input Vector
-    pub n_u: usize,
+pub struct UKF<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_U]:,
+    [(); N_Z * N_X]:,
+    [(); N_Z * (2 * N_X + 1)]:,
+    [(); N_X * (2 * N_X + 1)]:,
+    [(); (2 * N_X + 1) * (2 * N_X + 1)]:,
+{
+    ///// State Vector
+    //pub n_x: usize,
+    ///// Measurement Vector
+    //pub n_z: usize,
+    ///// Input Vector
+    //pub n_u: usize,
     /// Transition Model
-    F: UKF_TransitionModel<K>,
+    F: UKF_TransitionModel<K, N_X, N_U>,
     /// Observation Model
-    H: UKF_ObservationModel<K>,
+    H: UKF_ObservationModel<K, N_X, N_Z>,
     /// Control Matrix
-    G: Option<Matrix<K>>,
+    G: Option<Matrix<K, N_X, N_U>>,
     /// Sigma Points of the next step
-    sigma_points_prior: Matrix<K>,
+    sigma_points_prior: Matrix<K, N_X, { 2 * N_X + 1 }>,
     /// Lambda calculated with tune parameters for calculating the sigma points
     lambda: K,
     /// Weights for calculating the sigma points
-    weights: Vector<K>,
+    weights: Vector<K, { 2 * N_X + 1 }>,
     /// Weight but in diagonal for computational advantage
-    weights_diag: Matrix<K>,
+    weights_diag: Matrix<K, { 2 * N_X + 1 }, { 2 * N_X + 1 }>,
 }
 
 // Extended Kalman Filter --------------------------------------------------
-pub enum EKF_TransitionModel<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize> {
+pub enum EKF_TransitionModel<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_U]:,
+{
     Linear {
         F: Matrix<K, N_X, N_X>,
         F_transpose: Matrix<K, N_X, N_X>,
+        G: Option<Matrix<K, N_X, N_U>>,
     },
     NonLinear {
         f: fn(&Vector<K, N_X>, &Option<Vector<K, N_U>>) -> Vector<K, N_X>,
@@ -151,38 +183,47 @@ pub enum EKF_TransitionModel<K: Float, const N_X: usize, const N_Z: usize, const
     },
 }
 
-pub enum EKF_ObservationModel<K: Float> {
+pub enum EKF_ObservationModel<K: Float, const N_X: usize, const N_Z: usize>
+where
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+{
     Linear {
-        H: Matrix<K>,
-        H_transpose: Matrix<K>,
+        H: Matrix<K, N_Z, N_X>,
+        H_transpose: Matrix<K, N_X, N_Z>,
     },
     NonLinear {
-        f: fn(&Vector<K>, &Option<Vector<K>>) -> Vector<K>,
-        jac: fn(&Vector<K>, &Option<Vector<K>>) -> Matrix<K>,
+        f: fn(&Vector<K, N_X>) -> Vector<K, N_Z>,
+        jac: fn(&Vector<K, N_X>) -> Matrix<K, N_Z, N_X>,
     },
 }
 
 /// Extended Kalman Filter
-pub struct EKF<K: Float> {
-    n_x: usize,
-    n_z: usize,
-    n_u: usize,
-    F: EKF_TransitionModel<K>,
-    H: EKF_ObservationModel<K>,
-    G: Option<Matrix<K>>,
-    I: Matrix<K>,
+pub struct EKF<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_U]:,
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+{
+    F: EKF_TransitionModel<K, N_X, N_Z, N_U>,
+    H: EKF_ObservationModel<K, N_X, N_Z>,
+    I: Matrix<K, N_X, N_X>,
 }
 
 // Linear Kalman Filter --------------------------------------------------
 /// Linear Kalman Filter
-pub struct LKF<K: Float> {
-    n_x: usize,
-    n_z: usize,
-    n_u: usize,
-    F: Matrix<K>,
-    F_transpose: Matrix<K>,
-    H: Matrix<K>,
-    H_transpose: Matrix<K>,
-    G: Option<Matrix<K>>,
-    I: Matrix<K>,
+pub struct LKF<K: Float, const N_X: usize, const N_Z: usize, const N_U: usize>
+where
+    [(); N_X * N_X]:,
+    [(); N_X * N_U]:,
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+{
+    F: Matrix<K, N_X, N_X>,
+    F_transpose: Matrix<K, N_X, N_X>,
+    H: Matrix<K, N_Z, N_X>,
+    H_transpose: Matrix<K, N_X, N_Z>,
+    I: Matrix<K, N_X, N_X>,
+    G: Option<Matrix<K, N_X, N_U>>,
 }

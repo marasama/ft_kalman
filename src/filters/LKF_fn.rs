@@ -4,174 +4,88 @@ use matrix::vector::Vector;
 use num_traits::Float;
 use std::ops::{AddAssign, SubAssign};
 
-impl<K: Float + SubAssign + AddAssign> LKF<K> {
-    fn update_kalman_gain(&self, P_prior: &Matrix<K>, R: &Matrix<K>) -> Matrix<K> {
-        let mut gain: Matrix<K> = self.H.mul_mat_ref(P_prior).mul_mat_ref(&self.H_transpose);
-        gain.add_mat_ref(R);
+impl<K: Float + AddAssign + SubAssign, const N_X: usize, const N_Z: usize, const N_U: usize>
+    LKF<K, N_X, N_Z, N_U>
+where
+    [(); N_X * N_X]:,
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+    [(); N_X * N_U]:,
+{
+    fn update_kalman_gain(
+        &self,
+        P_prior: &Matrix<K, N_X, N_X>,
+        R: &Matrix<K, N_Z, N_Z>,
+    ) -> Matrix<K, N_X, N_Z> {
+        let mut gain = self
+            .H
+            .mul_mat(P_prior)
+            .mul_mat(&self.H_transpose)
+            .add_mat_ref(R);
         P_prior
-            .mul_mat_ref(&self.H_transpose)
-            .mul_mat_ref(&gain.inverse().unwrap())
+            .mul_mat(&self.H_transpose)
+            .mul_mat(&gain.inverse().unwrap())
     }
 
     fn update_estimation_covariance(
         &self,
-        K_n: &Matrix<K>,
-        R: &Matrix<K>,
-        P_prior: &Matrix<K>,
-    ) -> Matrix<K> {
-        let P_joseph = K_n.mul_mat_ref(R).mul_mat_ref(&K_n.transpose());
-        let main_part = self.I.sub_mat_ref(&K_n.mul_mat_ref(&self.H));
+        K_n: &Matrix<K, N_X, N_Z>,
+        R: &Matrix<K, N_Z, N_Z>,
+        P_prior: &Matrix<K, N_X, N_X>,
+    ) -> Matrix<K, N_X, N_X> {
+        let P_joseph = K_n.mul_mat(R).mul_mat(&K_n.transpose());
+        let main_part = self.I.sub_mat_ref(&K_n.mul_mat(&self.H));
         main_part
-            .mul_mat_ref(P_prior)
-            .mul_mat_ref(&main_part.transpose())
+            .mul_mat(P_prior)
+            .mul_mat(&main_part.transpose())
             .add_mat_ref(&P_joseph)
     }
 
     pub fn new(
-        n_x: usize,
-        n_z: usize,
-        n_u: usize,
-        F: Matrix<K>,
-        H: Matrix<K>,
-        G: Option<Matrix<K>>,
+        F: Matrix<K, N_X, N_X>,
+        H: Matrix<K, N_Z, N_X>,
+        G: Option<Matrix<K, N_X, N_U>>,
     ) -> Self {
-        assert_eq!(
-            F.size(),
-            (n_x, n_x),
-            "State Transition Matrix size must be {:?}!",
-            (n_x, n_x)
-        );
-        assert_eq!(
-            H.size(),
-            (n_z, n_x),
-            "Observation Matrix size must be {:?}!",
-            (n_z, n_x)
-        );
-        if let Some(g) = &G {
-            assert_eq!(
-                g.size(),
-                (n_x, n_u),
-                "Control Matrix size must be {:?}!",
-                (n_x, n_u)
-            );
-        };
         LKF {
-            n_x,
-            n_z,
-            n_u,
             F_transpose: F.transpose(),
             F,
             H_transpose: H.transpose(),
             H,
             G,
-            I: identity_matrix(n_x),
+            I: identity_matrix::<K, N_X>(),
         }
-    }
-
-    pub fn update_with(
-        &self,
-        x_prior: &Vector<K>,
-        z: &Vector<K>,
-        u: &Option<Vector<K>>,
-        P_prior: &Matrix<K>,
-        R: &Matrix<K>,
-        H: &Matrix<K>,
-    ) -> (Vector<K>, Matrix<K>, Matrix<K>) {
-        let n_z = z.size();
-        assert_eq!(
-            x_prior.size(),
-            self.n_x,
-            "Prior State Vector size must be {}!",
-            self.n_x
-        );
-        assert_eq!(
-            P_prior.size(),
-            (self.n_x, self.n_x),
-            "Prior Covariance Matrix size must be ({}, {})!",
-            self.n_x,
-            self.n_x
-        );
-        assert_eq!(
-            R.size(),
-            (n_z, n_z),
-            "Measurement Covariance Matrix size must be ({}, {})!",
-            n_z,
-            n_z,
-        );
-        assert_eq!(
-            H.size(),
-            (n_z, self.n_x),
-            "Observation Matrix size must be ({}, {})!",
-            n_z,
-            self.n_x,
-        );
-        let mut gain: Matrix<K> = H
-            .mul_mat_ref(P_prior)
-            .mul_mat_ref(&H.transpose())
-            .add_mat_ref(R);
-        let K_n = P_prior
-            .mul_mat_ref(&H.transpose())
-            .mul_mat_ref(&gain.inverse().unwrap());
-        dbg!("ZORT");
-        let x = K_n
-            .mul_vec_ref(&(z.sub_vec_ref(&H.mul_vec_ref(x_prior))))
-            .add_vec_ref(x_prior);
-        let P_joseph = &K_n.mul_mat_ref(R).mul_mat_ref(&K_n.transpose());
-        let main_part = self.I.sub_mat_ref(&K_n.mul_mat_ref(&H));
-        let P = main_part
-            .mul_mat_ref(P_prior)
-            .mul_mat_ref(&main_part.transpose())
-            .add_mat_ref(&P_joseph);
-        (x, P, K_n)
     }
 }
 
-impl<K: Float + AddAssign + SubAssign> KalmanModel<K> for LKF<K> {
+impl<K: Float + AddAssign + SubAssign, const N_X: usize, const N_Z: usize, const N_U: usize>
+    KalmanModel<K, N_X, N_Z, N_U> for LKF<K, N_X, N_Z, N_U>
+where
+    [(); N_X * N_X]:,
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+    [(); N_X * N_U]:,
+{
     fn state_dim(&self) -> usize {
-        self.n_x
+        N_X
     }
 
     fn meas_dim(&self) -> usize {
-        self.n_z
+        N_Z
     }
 
     fn update(
         &self,
-        x_prior: &Vector<K>,
-        z: &Vector<K>,
-        u: &Option<Vector<K>>,
-        P_prior: &Matrix<K>,
-        R: &Matrix<K>,
-    ) -> (Vector<K>, Matrix<K>, Matrix<K>) {
-        assert_eq!(
-            x_prior.size(),
-            self.n_x,
-            "Prior State Vector size must be {}!",
-            self.n_x
-        );
-        assert_eq!(
-            P_prior.size(),
-            (self.n_x, self.n_x),
-            "Prior Covariance Matrix size must be ({}, {})!",
-            self.n_x,
-            self.n_x
-        );
-        assert_eq!(
-            z.size(),
-            self.n_z,
-            "Measurement Vector size must be {}!",
-            self.n_z
-        );
-        assert_eq!(
-            R.size(),
-            (self.n_z, self.n_z),
-            "Measurement Covariance Matrix size must be ({}, {})!",
-            self.n_z,
-            self.n_z
-        );
+        x_prior: &Vector<K, N_X>,
+        z: &Vector<K, N_Z>,
+        P_prior: &Matrix<K, N_X, N_X>,
+        R: &Matrix<K, N_Z, N_Z>,
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>, Matrix<K, N_X, N_Z>) // x, P, K
+    {
         let K_n = self.update_kalman_gain(P_prior, R);
         let x = K_n
-            .mul_vec_ref(&(z.sub_vec_ref(&self.H.mul_vec_ref(x_prior))))
+            .mul_vec(&(z.sub_vec_ref(&self.H.mul_vec(x_prior))))
             .add_vec_ref(x_prior);
         let P = self.update_estimation_covariance(&K_n, R, P_prior);
         (x, P, K_n)
@@ -179,47 +93,16 @@ impl<K: Float + AddAssign + SubAssign> KalmanModel<K> for LKF<K> {
 
     fn predict(
         &mut self,
-        x: &Vector<K>,
-        u: &Option<Vector<K>>,
-        P: &Matrix<K>,
-        Q: &Matrix<K>,
-    ) -> (Vector<K>, Matrix<K>) {
-        assert_eq!(
-            x.size(),
-            self.n_x,
-            "State Vector size must be {}!",
-            self.n_x
-        );
-        assert_eq!(
-            P.size(),
-            (self.n_x, self.n_x),
-            "Covariance Matrix size must be ({}, {})!",
-            self.n_x,
-            self.n_x
-        );
-        assert_eq!(
-            Q.size(),
-            (self.n_x, self.n_x),
-            "Process Noise Matrix size must be ({}, {})!",
-            self.n_x,
-            self.n_x
-        );
-        let P_prior = self
-            .F
-            .mul_mat_ref(P)
-            .mul_mat_ref(&self.F_transpose)
-            .add_mat_ref(Q);
-        let x_prior = self.F.mul_vec_ref(x);
+        x: &Vector<K, N_X>,
+        u: &Option<Vector<K, N_U>>,
+        P: &Matrix<K, N_X, N_X>,
+        Q: &Matrix<K, N_X, N_X>,
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>) // x_prior, P_prior
+    {
+        let P_prior = self.F.mul_mat(P).mul_mat(&self.F_transpose).add_mat_ref(Q);
+        let x_prior = self.F.mul_vec(x);
         match (&self.G, u) {
-            (Some(g), Some(v)) => {
-                assert_eq!(
-                    v.size(),
-                    self.n_u,
-                    "Input Vector size must be equal to {}",
-                    self.n_u
-                );
-                (x_prior.add_vec_ref(&g.mul_vec_ref(v)), P_prior)
-            }
+            (Some(g), Some(v)) => (x_prior.add_vec_ref(&g.mul_vec(v)), P_prior),
             (Some(_), None) => {
                 panic!("Control Matrix is set but Input vector is empty!")
             }
@@ -228,5 +111,44 @@ impl<K: Float + AddAssign + SubAssign> KalmanModel<K> for LKF<K> {
             }
             (None, None) => (x_prior, P_prior),
         }
+    }
+}
+impl<K: Float + AddAssign + SubAssign, const N_X: usize, const N_Z: usize, const N_U: usize>
+    LKF<K, N_X, N_Z, N_U>
+where
+    [(); N_X * N_X]:,
+    [(); N_Z * N_X]:,
+    [(); N_X * N_Z]:,
+    [(); N_Z * N_Z]:,
+    [(); N_X * N_U]:,
+{
+    pub fn update_with<const N_Z_NEW: usize>(
+        &self,
+        x_prior: &Vector<K, N_X>,
+        z: &Vector<K, N_Z_NEW>,
+        u: &Option<Vector<K, N_U>>,
+        P_prior: &Matrix<K, N_X, N_X>,
+        R: &Matrix<K, N_Z_NEW, N_Z_NEW>,
+        H: &Matrix<K, N_Z_NEW, N_X>,
+    ) -> (Vector<K, N_X>, Matrix<K, N_X, N_X>, Matrix<K, N_X, N_Z_NEW>)
+    where
+        [(); N_Z_NEW * N_Z_NEW]:,
+        [(); N_Z_NEW * N_X]:,
+        [(); N_X * N_Z_NEW]:,
+    {
+        let gain = H.mul_mat(P_prior).mul_mat(&H.transpose()).add_mat_ref(R);
+        let K_n = P_prior
+            .mul_mat(&H.transpose())
+            .mul_mat(&gain.inverse().unwrap());
+        let x = K_n
+            .mul_vec(&(z.sub_vec_ref(&H.mul_vec(x_prior))))
+            .add_vec_ref(x_prior);
+        let P_joseph = K_n.mul_mat(R).mul_mat(&K_n.transpose());
+        let main_part = self.I.sub_mat_ref(&K_n.mul_mat(H));
+        let P = main_part
+            .mul_mat(P_prior)
+            .mul_mat(&main_part.transpose())
+            .add_mat_ref(&P_joseph);
+        (x, P, K_n)
     }
 }

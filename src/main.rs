@@ -1,3 +1,5 @@
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 #![allow(non_snake_case)]
 use ft_kalman::filters::KalmanCore;
 use ft_kalman::udp_parser::*;
@@ -61,7 +63,7 @@ fn main() -> std::io::Result<()> {
     let q_vv = delta_t_pow_2 * accel_noise;
     let q_va = DELTA_T * accel_noise;
     let q_aa = accel_noise;
-    let Q: Matrix<f64> = Matrix::from([
+    let Q = Matrix::from([
         [gn_delta, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., gn_delta, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 0., gn_delta, 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -76,7 +78,7 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., 0., 0., 0., 0., q_pa, q_va, q_aa],
     ]);
 
-    let R: Matrix<f64> = Matrix::from([
+    let R = Matrix::from([
         [gyro_noise, 0., 0., 0., 0., 0.],
         [0., gyro_noise, 0., 0., 0., 0.],
         [0., 0., gyro_noise, 0., 0., 0.],
@@ -85,13 +87,13 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., accel_noise],
     ]);
 
-    let R_gps: Matrix<f64> = Matrix::from([
+    let R_gps = Matrix::from([
         [gps_noise, 0., 0.],
         [0., gps_noise, 0.],
         [0., 0., gps_noise],
     ]);
 
-    let F: Matrix<f64> = Matrix::from([
+    let F = Matrix::from([
         [1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -106,7 +108,7 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
     ]);
 
-    let H: Matrix<f64> = Matrix::from([
+    let H = Matrix::from([
         [1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -115,15 +117,15 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
     ]);
 
-    let H_gps: Matrix<f64> = Matrix::from([
+    let H_gps = Matrix::from([
         [0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
         [0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0.],
     ]);
-    let model = filters::LKF::new(12, 6, 0, F, H, Option::None);
+    let model = filters::LKF::<f64, 12, 6, 0>::new(F, H, Option::None);
 
-    let x: Vector<f64> = Vector::from([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]);
-    let P: Matrix<f64> = Matrix::from([
+    let x = Vector::from([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]);
+    let P = Matrix::from([
         [1e-4, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 1e-4, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
         [0., 0., 1e-4, 0., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -138,7 +140,7 @@ fn main() -> std::io::Result<()> {
         [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1e-6],
     ]);
 
-    let mut z: Vector<f64> = Vector::from([0., 0., 0., 0., 0., 0.]);
+    let mut z = Vector::from([0., 0., 0., 0., 0., 0.]);
     let u = Option::None;
 
     let mut filter = KalmanCore::new(model, x, P, Q, R);
@@ -184,7 +186,7 @@ fn main() -> std::io::Result<()> {
         loop {
             let mut buffer: [u8; 400] = [0; 400];
             let (amt, _src) = socket.recv_from(&mut buffer)?;
-            println!(r"{}", String::from_utf8_lossy(&buffer[..amt]));
+            //println!(r"{}", String::from_utf8_lossy(&buffer[..amt]));
             if process_parsing(&mut vehicle, parse(&buffer[..amt])) {
                 break;
             }
@@ -211,7 +213,7 @@ fn main() -> std::io::Result<()> {
         filter.step(&z, &u);
 
         if vehicle.gps_fresh {
-            let z_gps: Vector<f64> = Vector::from([
+            let z_gps = Vector::from([
                 vehicle.gps_position.0,
                 vehicle.gps_position.1,
                 vehicle.gps_position.2,
@@ -219,7 +221,7 @@ fn main() -> std::io::Result<()> {
 
             let x_post = filter.x.clone();
             let P_post = filter.P.clone();
-            (filter.x, filter.P, filter.K) = filter
+            (filter.x, filter.P, _) = filter
                 .model
                 .update_with(&x_post, &z_gps, &u, &P_post, &R_gps, &H_gps);
             vehicle.gps_fresh = false;
